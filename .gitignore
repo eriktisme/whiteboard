@@ -1,0 +1,4 @@
+.dynamodb
+.webpack
+.webpackCache
+/node_modules

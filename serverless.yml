@@ -1,0 +1,94 @@
+service: whiteboard
+
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  lambdaHashingVersion: 20201221
+  region: ${opt:region, 'eu-west-1'}
+  stage: ${opt:stage, 'dev'}
+  httpApi:
+    cors: true
+  tags:
+    service: whiteboard
+  tracing:
+    apiGateway: true
+    lambda: true
+  iam:
+    role:
+      statements:
+        - Effect: 'Allow'
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+          Resource: 'arn:aws:dynamodb:${self:provider.region}:*:table/board-messages-table'
+  environment:
+    DYNAMODB_REGION: ${self:custom.environments.${self:provider.stage}.dynamodb-region}
+    DYNAMODB_ENDPOINT: ${self:custom.environments.${self:provider.stage}.dynamodb-endpoint}
+    DYNAMODB_ACCESS_KEY_ID: ${self:custom.environments.${self:provider.stage}.dynamodb-access-key-id}
+    DYNAMODB_SECRET_ACCESS_KEY: ${self:custom.environments.${self:provider.stage}.dynamodb-secret-access-key}
+
+plugins:
+  - serverless-webpack
+  - serverless-dynamodb-local
+  - serverless-offline
+
+package:
+  individually: true
+
+custom:
+  dynamodb:
+    stages:
+      - dev
+    start:
+      port: 8000
+      inMemory: true
+      heapInitial: 200m
+      heapMax: 1g
+      migrate: true
+
+  webpack:
+    webpackConfig: 'webpack.config.js'
+    includeModules: false
+    packager: 'npm'
+
+  environments:
+    dev:
+      dynamodb-region: 'localhost'
+      dynamodb-endpoint: 'http://localhost:8000'
+      dynamodb-access-key-id: 'DEFAULT_ACCESS_KEY'
+      dynamodb-secret-access-key: 'DEFAULT_SECRET'
+
+functions:
+  messages:
+    handler: functions/messages/handler.index
+    memorySize: 128
+    timeout: 5
+    events:
+      - http:
+          path: messages
+          method: get
+      - http:
+          path: messages
+          method: post
+
+resources:
+  Resources:
+    BoardMessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: board-messages-table
+        AttributeDefinitions:
+          - AttributeName: partKey
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: N
+        KeySchema:
+          - AttributeName: partKey
+            KeyType: HASH
+          - AttributeName: createdAt
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
